@@ -12,8 +12,16 @@
 | Watchdog | 작업이 끝나기 전에 락이 만료되지 않게 자동 연장 |
 
 - 설정: `lock/config/RedissonConfig.kt`. Spring의 `DataRedisConnectionDetails`로 접속하므로 Spring Data Redis와 같은 Redis에 붙는다.
-- 락 키: `coupon:{couponId}:issue-lock` (Hash. 필드는 `<Redisson 클라이언트 ID>:<스레드 ID>`, 값은 재진입 횟수)
 - 아래 Redisson 내부 명령은 Redisson 소스 기준으로 요약한 것이다. 버전에 따라 세부가 다를 수 있다.
+
+## 데이터 구조
+
+| 키 | 타입 | 값 |
+| --- | --- | --- |
+| `coupon:{couponId}:quantity` | String | 총 수량 |
+| `coupon:{couponId}:issued-users` | Set | 발급받은 사용자 ID |
+| `coupon:{couponId}:issue-lock` | Hash (Redisson 락) | 필드 `(Redisson 클라이언트 ID):(스레드 ID)`, 값은 재진입 횟수. PEXPIRE 30초 |
+| 락 해제 채널 (Redisson 내부) | Pub/Sub 채널 | 락 해제 알림 |
 
 ## 1. 물리 구성도
 
@@ -112,8 +120,8 @@ flowchart TD
     style client fill:#ECEFF1,stroke:#263238,stroke-width:2px,color:#000000,font-weight:bold
     style app fill:#D8EFC8,stroke:#1E3D0C,stroke-width:2px,color:#000000,font-weight:bold
     style redis fill:#F9D2CF,stroke:#5C120D,stroke-width:2px,color:#000000,font-weight:bold
-    style appCritical fill:#F0F8EA,stroke:#1E3D0C,stroke-dasharray:5 5,stroke-width:2px,color:#000000,font-weight:bold
-    style redisCritical fill:#FDF1F0,stroke:#5C120D,stroke-dasharray:5 5,stroke-width:2px,color:#000000,font-weight:bold
+    style appCritical fill:#FFFFFF,stroke:#1E3D0C,stroke-dasharray:5 5,stroke-width:2px,color:#000000,font-weight:bold
+    style redisCritical fill:#FFFFFF,stroke:#5C120D,stroke-dasharray:5 5,stroke-width:2px,color:#000000,font-weight:bold
 ```
 
 - 락이 Redis에 있으므로 앱 서버가 몇 대든 한 쿠폰의 발급은 한 번에 하나만 실행된다.
@@ -124,7 +132,7 @@ flowchart TD
 수량 10, 이미 9명 발급된 상태에서 두 사용자가 동시에 요청한 경우다. 한 요청이 다른 요청을 기다리는 시간 순서는 흐름도로 보기 어려워 시퀀스로 그린다.
 
 ```mermaid
-%%{init: {"themeVariables": {"background": "#FFFFFF", "mainBkg": "#FFFFFF", "edgeLabelBackground": "transparent", "actorBkg": "transparent", "signalColor": "#000000", "actorBorder": "#212121", "noteBkgColor": "transparent", "noteBorderColor": "#212121", "labelBoxBkgColor": "transparent", "labelBoxBorderColor": "#212121", "activationBkgColor": "transparent", "activationBorderColor": "#212121", "lineColor": "#212121", "primaryTextColor": "#000000", "secondaryTextColor": "#000000", "tertiaryTextColor": "#000000", "textColor": "#000000", "nodeTextColor": "#000000", "titleColor": "#000000", "actorTextColor": "#000000", "signalTextColor": "#000000", "noteTextColor": "#000000", "labelTextColor": "#000000", "loopTextColor": "#000000"}, "themeCSS": "& { background-color: #FFFFFF !important; } .edgeLabel, .edgeLabel p, .edgeLabel span, .labelBkg { background-color: transparent !important; } .edgeLabel rect { fill: transparent !important; opacity: 0 !important; } rect.actor, rect.note, .labelBox, rect[class^=activation] { fill: transparent !important; stroke: #212121 !important; } .messageLine0, .messageLine1 { stroke: #000000 !important; } marker path, .arrowheadPath { fill: #000000 !important; stroke: #000000 !important; } text, tspan { fill: #000000 !important; font-weight: bold !important; } .nodeLabel, .edgeLabel, .cluster-label, .label, span, p { color: #000000 !important; font-weight: bold !important; }"}}%%
+%%{init: {"themeVariables": {"background": "#FFFFFF", "mainBkg": "#FFFFFF", "edgeLabelBackground": "transparent", "actorBkg": "transparent", "signalColor": "#000000", "sequenceNumberColor": "#000000", "actorBorder": "#212121", "noteBkgColor": "transparent", "noteBorderColor": "#212121", "labelBoxBkgColor": "transparent", "labelBoxBorderColor": "#212121", "activationBkgColor": "transparent", "activationBorderColor": "#212121", "lineColor": "#212121", "primaryTextColor": "#000000", "secondaryTextColor": "#000000", "tertiaryTextColor": "#000000", "textColor": "#000000", "nodeTextColor": "#000000", "titleColor": "#000000", "actorTextColor": "#000000", "signalTextColor": "#000000", "noteTextColor": "#000000", "labelTextColor": "#000000", "loopTextColor": "#000000"}, "themeCSS": "& { background-color: #FFFFFF !important; } .edgeLabel, .edgeLabel p, .edgeLabel span, .labelBkg { background-color: transparent !important; } .edgeLabel rect { fill: transparent !important; opacity: 0 !important; } rect.actor, rect.note, .labelBox, rect[class^=activation] { fill: transparent !important; stroke: #212121 !important; } .messageLine0, .messageLine1 { stroke: #000000 !important; } marker circle { fill: transparent !important; stroke: #000000 !important; } marker path, .arrowheadPath { fill: #000000 !important; stroke: #000000 !important; } text, tspan { fill: #000000 !important; font-weight: bold !important; } .nodeLabel, .edgeLabel, .cluster-label, .label, span, p { color: #000000 !important; font-weight: bold !important; }"}}%%
 sequenceDiagram
     autonumber
     participant A as 요청 A (user-10)
@@ -148,7 +156,7 @@ sequenceDiagram
 
 - naive와 명령은 같지만, 락 덕분에 A의 확인과 발급 사이에 B의 확인이 끼어들 수 없다.
 
-## 한계
+## 한계와 주의할 점
 
 - 요청이 하나씩 줄을 서므로 처리량이 가장 낮다. 락 획득·해제 왕복과 대기가 요청마다 더해진다.
 - 10초 안에 락을 얻지 못하면 예외가 나서 500으로 응답한다.

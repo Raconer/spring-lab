@@ -13,7 +13,14 @@
 - 스크립트: `src/main/resources/redis/couponfirstcome/lua/issue.lua`
 - 호출: `LuaCouponIssuer.issue()` → `StringRedisTemplate.execute(issueScript, keys, userId)`
 
-## 스크립트 입력과 반환
+## 데이터 구조
+
+| 키 | 타입 | 값 |
+| --- | --- | --- |
+| `coupon:{couponId}:quantity` | String | 총 수량 |
+| `coupon:{couponId}:issued-users` | Set | 발급받은 사용자 ID |
+
+스크립트 입력과 반환:
 
 | 구분 | 값 |
 | --- | --- |
@@ -108,7 +115,7 @@ flowchart TD
     style client fill:#ECEFF1,stroke:#263238,stroke-width:2px,color:#000000,font-weight:bold
     style app fill:#D8EFC8,stroke:#1E3D0C,stroke-width:2px,color:#000000,font-weight:bold
     style redis fill:#F9D2CF,stroke:#5C120D,stroke-width:2px,color:#000000,font-weight:bold
-    style atomic fill:#FDF1F0,stroke:#5C120D,stroke-dasharray:5 5,stroke-width:2px,color:#000000,font-weight:bold
+    style atomic fill:#FFFFFF,stroke:#5C120D,stroke-dasharray:5 5,stroke-width:2px,color:#000000,font-weight:bold
 ```
 
 - 요청 하나는 Redis와 한 번만 왕복한다 (`EVALSHA`, 캐시에 없을 때만 `EVAL` 한 번 더).
@@ -119,7 +126,7 @@ flowchart TD
 수량 10, 이미 9명 발급된 상태에서 두 사용자가 동시에 요청한 경우다. 두 요청이 겹치는 시간 순서는 흐름도로 보기 어려워 시퀀스로 그린다.
 
 ```mermaid
-%%{init: {"themeVariables": {"background": "#FFFFFF", "mainBkg": "#FFFFFF", "edgeLabelBackground": "transparent", "actorBkg": "transparent", "signalColor": "#000000", "actorBorder": "#212121", "noteBkgColor": "transparent", "noteBorderColor": "#212121", "labelBoxBkgColor": "transparent", "labelBoxBorderColor": "#212121", "activationBkgColor": "transparent", "activationBorderColor": "#212121", "lineColor": "#212121", "primaryTextColor": "#000000", "secondaryTextColor": "#000000", "tertiaryTextColor": "#000000", "textColor": "#000000", "nodeTextColor": "#000000", "titleColor": "#000000", "actorTextColor": "#000000", "signalTextColor": "#000000", "noteTextColor": "#000000", "labelTextColor": "#000000", "loopTextColor": "#000000"}, "themeCSS": "& { background-color: #FFFFFF !important; } .edgeLabel, .edgeLabel p, .edgeLabel span, .labelBkg { background-color: transparent !important; } .edgeLabel rect { fill: transparent !important; opacity: 0 !important; } rect.actor, rect.note, .labelBox, rect[class^=activation] { fill: transparent !important; stroke: #212121 !important; } .messageLine0, .messageLine1 { stroke: #000000 !important; } marker path, .arrowheadPath { fill: #000000 !important; stroke: #000000 !important; } text, tspan { fill: #000000 !important; font-weight: bold !important; } .nodeLabel, .edgeLabel, .cluster-label, .label, span, p { color: #000000 !important; font-weight: bold !important; }"}}%%
+%%{init: {"themeVariables": {"background": "#FFFFFF", "mainBkg": "#FFFFFF", "edgeLabelBackground": "transparent", "actorBkg": "transparent", "signalColor": "#000000", "sequenceNumberColor": "#000000", "actorBorder": "#212121", "noteBkgColor": "transparent", "noteBorderColor": "#212121", "labelBoxBkgColor": "transparent", "labelBoxBorderColor": "#212121", "activationBkgColor": "transparent", "activationBorderColor": "#212121", "lineColor": "#212121", "primaryTextColor": "#000000", "secondaryTextColor": "#000000", "tertiaryTextColor": "#000000", "textColor": "#000000", "nodeTextColor": "#000000", "titleColor": "#000000", "actorTextColor": "#000000", "signalTextColor": "#000000", "noteTextColor": "#000000", "labelTextColor": "#000000", "loopTextColor": "#000000"}, "themeCSS": "& { background-color: #FFFFFF !important; } .edgeLabel, .edgeLabel p, .edgeLabel span, .labelBkg { background-color: transparent !important; } .edgeLabel rect { fill: transparent !important; opacity: 0 !important; } rect.actor, rect.note, .labelBox, rect[class^=activation] { fill: transparent !important; stroke: #212121 !important; } .messageLine0, .messageLine1 { stroke: #000000 !important; } marker circle { fill: transparent !important; stroke: #000000 !important; } marker path, .arrowheadPath { fill: #000000 !important; stroke: #000000 !important; } text, tspan { fill: #000000 !important; font-weight: bold !important; } .nodeLabel, .edgeLabel, .cluster-label, .label, span, p { color: #000000 !important; font-weight: bold !important; }"}}%%
 sequenceDiagram
     autonumber
     participant A as 요청 A (user-10)
@@ -141,7 +148,7 @@ sequenceDiagram
 
 - 확인과 발급이 한 덩어리로 실행되므로 naive의 check-then-act 경쟁 상태가 생기지 않는다.
 
-## 주의할 점
+## 한계와 주의할 점
 
 - 스크립트가 오래 걸리면 그동안 Redis 전체가 멈춘다. 스크립트에는 짧은 명령만 넣는다.
 - 스크립트가 쓰는 키는 모두 `KEYS`로 넘긴다. 그래야 Redis Cluster가 키의 슬롯을 확인할 수 있다. 이 시나리오는 `{couponId}` 해시 태그로 두 키를 같은 슬롯에 둔다.

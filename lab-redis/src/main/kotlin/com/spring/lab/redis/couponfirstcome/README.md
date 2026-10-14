@@ -17,7 +17,7 @@
 | `incr` | 원자 명령 `SADD`, `INCR` + 되돌리기 | 지킨다 (잠깐 Set이 커 보임) | [incr/README.md](incr/README.md) |
 | `lock` | Redisson 분산 락 | 지킨다 (가장 느림) | [lock/README.md](lock/README.md) |
 
-## 키 구조
+## 데이터 구조
 
 모든 방식이 같은 키를 쓴다. 키 규칙은 `common/repository/CouponRedisKeys.kt` 한 곳에 있다.
 

@@ -11,7 +11,7 @@ Redis String 값의 저장·조회·삭제와 TTL, 연결 확인(PING)을 실습
 | `PING` | 연결 확인 |
 | Spring Data Redis `StringRedisTemplate` + Lettuce | 애플리케이션에서 Redis 명령 실행 |
 
-## 키 구조
+## 데이터 구조
 
 | 키 | 타입 | 값 |
 | --- | --- | --- |
