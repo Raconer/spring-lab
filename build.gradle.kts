@@ -56,6 +56,8 @@ subprojects {
 
         dependencies {
             "implementation"("org.jetbrains.kotlin:kotlin-reflect")
+            // 요청 본문을 Kotlin data class로 받는다 (Initializr의 Kotlin + Web 기본 구성)
+            "implementation"("tools.jackson.module:jackson-module-kotlin")
             "testImplementation"("org.jetbrains.kotlin:kotlin-test-junit5")
         }
     }
