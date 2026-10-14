@@ -1,0 +1,18 @@
+services:
+  redis:
+    image: 'redis:latest'
+    ports:
+      - '6379:6379'
+
+  # bootRun의 Docker Compose 지원이 같이 띄우지 않도록 local-test 프로필로 분리한다
+  lab-redis:
+    profiles: ['local-test']
+    build:
+      context: ..
+      dockerfile: lab-redis/Dockerfile
+    ports:
+      - '8080:8080'
+    environment:
+      SPRING_DATA_REDIS_HOST: redis
+    depends_on:
+      - redis
