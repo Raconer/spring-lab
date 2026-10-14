@@ -9,7 +9,7 @@ Redis를 실습하는 기능 모듈이다. Kotlin으로 작성한다. 루트 `CL
 | `base` | String 저장·조회·삭제, TTL, PING | `/redis/values/{key}`, `/redis/ping` |
 | `couponfirstcome` | 쿠폰 선착순 발급. 방식 `naive`, `lua`, `incr`, `lock`을 비교한다 | `/redis/coupons/...` |
 
-시나리오를 추가하거나 없애면 이 표와 README의 API 표를 같이 고친다.
+시나리오를 추가하거나 없애면 이 표와 루트 README의 API 표를 같이 고친다. 시나리오마다 동작 설명은 그 시나리오 폴더의 `README.md`에 있다 (예: `couponfirstcome/README.md`, `couponfirstcome/lua/README.md`).
 
 ## 계층 나누기: Command / Query
 
