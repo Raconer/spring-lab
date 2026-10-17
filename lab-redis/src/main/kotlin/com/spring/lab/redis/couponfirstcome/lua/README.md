@@ -148,6 +148,19 @@ sequenceDiagram
 
 - 확인과 발급이 한 덩어리로 실행되므로 naive의 check-then-act 경쟁 상태가 생기지 않는다.
 
+## 부하 테스트
+
+nGrinder 테스트 Parameter `method.lua`로 실행한다. 실행 조건과 검증 기준은 [시나리오 README](../README.md)의 `부하 테스트` 섹션을 따른다.
+
+예상 결과: 모두 통과.
+
+## 모니터링
+
+| 도구 | 보는 곳 | 볼 것 |
+| --- | --- | --- |
+| Grafana | `redis / couponfirstcome` 대시보드 | `method="lua"` 선의 결과별 처리량과 p95 |
+| Pinpoint | application `lab-redis` | Redis 명령이 `EVALSHA` 하나로 보인다 |
+
 ## 한계와 주의할 점
 
 - 스크립트가 오래 걸리면 그동안 Redis 전체가 멈춘다. 스크립트에는 짧은 명령만 넣는다.

@@ -119,6 +119,19 @@ sequenceDiagram
 
 - `INCR`은 원자적이라 두 요청이 같은 순번을 받지 않는다. 그래서 ISSUED는 수량만큼만 나온다.
 
+## 부하 테스트
+
+nGrinder 테스트 Parameter `method.incr`로 실행한다. 실행 조건과 검증 기준은 [시나리오 README](../README.md)의 `부하 테스트` 섹션을 따른다.
+
+예상 결과: 모두 통과.
+
+## 모니터링
+
+| 도구 | 보는 곳 | 볼 것 |
+| --- | --- | --- |
+| Grafana | `redis / couponfirstcome` 대시보드 | `method="incr"` 선의 결과별 처리량과 p95 |
+| Pinpoint | application `lab-redis` | `GET`, `SADD`, `INCR`과 초과 시 `SREM`이 보인다 |
+
 ## 한계와 주의할 점
 
 - `SADD`와 `SREM` 사이에는 발급 Set에 수량보다 많은 사용자가 잠깐 보인다. 그 순간 조회하면 `issuedCount`가 수량보다 크게 나올 수 있다 (`remaining`은 0으로 맞춘다).

@@ -1,0 +1,25 @@
+# Pinpoint 에이전트 파일을 볼륨에 채우고 collector 주소를 설정한다
+# 단독으로 띄우지 않는다. 모듈의 compose.pinpoint.yaml이 extends로 가져가 그 모듈 그룹 안에서 띄운다
+services:
+  pinpoint-agent:
+    image: 'pinpointdocker/pinpoint-agent:3.1.1'
+    # amd64 이미지만 있다. 에이전트 파일만 볼륨에 채우므로 앱 아키텍처와 상관없다
+    platform: linux/amd64
+    volumes:
+      - pinpoint-agent:/pinpoint-agent
+    environment:
+      SPRING_PROFILES: 'release'
+      # pinpoint 그룹의 collector. spring-boot-lab 네트워크로 찾는다
+      COLLECTOR_IP: 'pinpoint-collector'
+      PROFILER_TRANSPORT_MODULE: 'GRPC'
+      PROFILER_TRANSPORT_AGENT_COLLECTOR_PORT: '9991'
+      PROFILER_TRANSPORT_METADATA_COLLECTOR_PORT: '9991'
+      PROFILER_TRANSPORT_STAT_COLLECTOR_PORT: '9992'
+      PROFILER_TRANSPORT_SPAN_COLLECTOR_PORT: '9993'
+      # 실습이라 모든 요청을 추적한다
+      PROFILER_SAMPLING_TYPE: 'COUNTING'
+      PROFILER_SAMPLING_COUNTING_SAMPLING_RATE: '1'
+      DEBUG_LEVEL: 'INFO'
+
+volumes:
+  pinpoint-agent:

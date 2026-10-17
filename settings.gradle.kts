@@ -6,6 +6,6 @@ plugins {
 rootProject.name = "lab"
 
 include(
-    "lab-core",
+    "core",
     "lab-redis",
 )

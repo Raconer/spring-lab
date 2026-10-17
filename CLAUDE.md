@@ -16,13 +16,46 @@ Spring Boot에서 기술을 하나씩 실습하는 Gradle 멀티모듈 프로젝
 
 ## 모듈 규칙
 
-- 모든 모듈에 공통인 의존성과 설정만 `lab-core`에 둔다. 특정 기술에만 쓰는 것은 그 기능 모듈에 둔다.
-- 기능 모듈은 `implementation(project(":lab-core"))`와 `testImplementation(testFixtures(project(":lab-core")))`로 공통 모듈을 가져간다.
-- 기능 모듈 이름은 `lab-<기술>`, 패키지는 `com.spring.lab.<기술>`로 한다.
+- 모든 모듈에 공통인 의존성과 설정만 `core`에 둔다. 특정 기술에만 쓰는 것은 그 기능 모듈에 둔다.
+- 기능 모듈은 `implementation(project(":core"))`와 `testImplementation(testFixtures(project(":core")))`로 공통 모듈을 가져간다.
+- 기능을 실습하는 모듈은 `lab-<기술>`(예: `lab-redis`), 그 외 모듈은 목적 이름(`core`)으로 한다. 패키지는 `com.spring.lab.<기술 또는 목적>`으로 한다.
 - 기능 모듈의 애플리케이션 클래스는 `@Import(LabCoreConfiguration::class)`로 공통 설정을 가져온다.
-- 인프라는 그 모듈 디렉터리의 `compose.yaml`에 둔다. 앱 컨테이너 서비스는 `profiles: ['local-test']`로 분리해서 `bootRun`이 같이 띄우지 않게 한다.
+- 인프라는 그 모듈 디렉터리의 `compose.yaml`에 둔다. 앱 컨테이너와 exporter는 `profiles: ['local-test']`로 분리해서 `bootRun`이 같이 띄우지 않게 한다.
 - 모듈을 추가하면 `settings.gradle.kts`, README의 모듈 구조, 그 모듈의 `CLAUDE.md`를 같이 만든다. 모듈을 없애면 셋 다 정리한다.
 - 모듈 `CLAUDE.md`에는 그 모듈의 시나리오 목록, 계층을 나누는 기준, 기술 전용 규칙(키·토픽 이름, 테스트 도구 등)을 적는다.
+
+## 공용 스택 (이미지, 부하 테스트, 모니터링)
+
+여러 모듈이 같이 쓰는 것은 한 곳에만 두고, 모듈은 가져다 쓰기만 한다. 억지로 공용화하지 않는다. 기술에만 쓰는 것(예: `redis-exporter`)은 그 모듈에 둔다.
+
+| 공용 | 위치 | 모듈이 할 일 |
+| --- | --- | --- |
+| 이미지 빌드 | 루트 `Dockerfile` | 앱 서비스의 `build`에 `context: ..`, `dockerfile: Dockerfile`, `args: MODULE: lab-(기술)` |
+| 메트릭 노출 | `core` (actuator, Prometheus 레지스트리, `lab-core.properties`) | 없음. `/actuator/prometheus`가 자동으로 열린다 |
+| 지표 모니터링 | `monitoring/compose.yaml` (Prometheus, Grafana) | `prometheus.yml`에 그룹 이름과 같은 job을 만들고 앱(`role: app`, `__metrics_path__: /actuator/prometheus`)과 exporter(`role: exporter`)를 넣는다. 시나리오 대시보드 추가 |
+| 추적 모니터링 | `monitoring/pinpoint/compose.yaml` (Pinpoint 3.1.1), `monitoring/pinpoint/agent.yaml` (에이전트) | `compose.pinpoint.yaml`에서 `agent.yaml`을 `extends`로 가져와 앱에 에이전트 연결 |
+| 부하 테스트 | `loadtest/compose.yaml` (nGrinder controller, agent), `loadtest/scripts/` | `loadtest/scripts/(기술)/(시나리오).groovy`에 nGrinder 스크립트 추가. 규칙은 `loadtest/CLAUDE.md` |
+
+- compose는 그룹(프로젝트)마다 따로 띄운다. 원하는 그룹만 실행할 수 있게 하기 위해서다.
+
+  | 그룹 (`name:`) | compose 파일 | 컨테이너 |
+  | --- | --- | --- |
+  | `lab-(기술)` | `lab-(기술)/compose.yaml` + `compose.pinpoint.yaml` | 앱, 인프라, exporter, Pinpoint 에이전트 |
+  | `monitoring` | `monitoring/compose.yaml` | Prometheus, Grafana |
+  | `pinpoint` | `monitoring/pinpoint/compose.yaml` | Pinpoint 서버 5개 |
+  | `loadtest` | `loadtest/compose.yaml` | nGrinder controller, agent |
+
+  - 모든 compose 파일은 `networks.default.name: spring-boot-lab`으로 같은 네트워크를 쓴다. 그룹끼리는 서비스 이름(예: `lab-redis:8080`)으로 찾는다. 다른 그룹이 먼저 만든 네트워크를 쓸 때 compose가 경고를 띄우지만 정상이다.
+  - 그룹을 넘어 `depends_on`을 걸 수 없다. 앱이 꼭 필요한 것(Pinpoint 에이전트 파일)은 앱 그룹 안에 둔다.
+  - 컨테이너 이름은 `container_name: (그룹).(역할)`로 둔다 (예: `redis.app`, `redis.server`, `monitoring.grafana`, `pinpoint.web`). 그룹은 모듈 그룹이면 `lab-`을 뺀 기술 이름, 공용 그룹이면 프로젝트 이름 그대로다.
+  - 모듈 그룹의 프로필은 `local-test`만 쓴다. 공용 그룹 compose에는 프로필을 두지 않는다.
+- IntelliJ 실행 설정은 `.run/(그룹).run.xml`에 두고 `folderName="docker"`로 묶는다. 모듈마다 전부 띄우는 `lab-(기술)-all`(예: `lab-redis-all`)은 그 모듈 그룹과 같은 compose 배포 설정에 Before launch(`RunConfigurationTask`)로 공용 그룹 설정을 순서대로 건 것이다. Compound는 그룹을 동시에 실행하다 일부를 빠뜨려서 쓰지 않는다.
+  - 앱을 빌드하는 그룹은 `commandLineOptions="--build"`를 켠다. 모든 그룹은 `upDetach`, `upForceRecreate`(떠 있던 컨테이너를 내리고 새로 띄움), `upRemoveOrphans`를 켠다.
+  - 모듈 그룹은 `secondarySourceFiles`에 `compose.pinpoint.yaml`, `profiles`에 `local-test`를 적는다. IntelliJ는 `.env`의 프로필을 적용하지 않는다.
+- 공용 compose에는 호스트 포트가 겹치지 않게 한다. 지금 쓰는 포트: 앱 8080, nGrinder controller 8090, Prometheus 9090, Grafana 3000, Pinpoint web 8079, Redis 6379.
+- 이미지는 버전을 고정한다 (예: `prom/prometheus:v3.13.4`). 버전을 올리면 공용 compose 한 곳만 고친다.
+- 시나리오 메트릭은 그 시나리오의 핵심 동작 하나에 Micrometer `Timer` 하나를 둔다. 이름은 `(시나리오 대상).(동작)`(예: `coupon.issue`), 태그는 비교 축(예: `method`, `result`)으로 하고 `publishPercentileHistogram()`을 켠다. 메트릭 기록은 service에서 한다.
+- 대시보드는 `monitoring/grafana/dashboards/(기술)/(시나리오).json`에 두고, 시나리오 메트릭·인프라 지표·시나리오 API 요청 지표(`http_server_requests_seconds_*{uri="(시나리오 API 경로)"}`)를 한 화면에 둔다. nGrinder는 Prometheus로 지표를 내보내지 않으므로 부하 쪽 결과는 nGrinder 화면에서 본다.
 
 ## 패키지 구조
 
@@ -109,6 +142,26 @@ README는 무조건 아래 양식으로 만든다. 섹션 순서, 제목, mermai
 (왜 1, 2로는 부족한지 한 줄)
 
 (템플릿 C)
+
+## 부하 테스트
+
+nGrinder 스크립트 `loadtest/scripts/(기술)/(시나리오).groovy`로 부하를 준다.
+
+| 항목 | 값 |
+| --- | --- |
+| Parameter (`key.value`를 쉼표로) | (key, 고를 수 있는 값과 기본값. 예: `method`: `naive`, `lua` (기본 `naive`)) |
+| 실행 조건 | (agent 수, 프로세스 수, 가상 사용자 수, 실행 횟수) |
+| 검증 | (부하 후 확인하는 규칙. `@AfterProcess` 로그로 남김) |
+
+1. `http://localhost:8090`(nGrinder, `admin` / `admin`)의 `Script`에 스크립트를 올린다.
+2. `Performance Test` → `Create Test`에서 스크립트를 고르고, 실행 조건과 `상세 설정 보기`의 Parameter를 넣고 시작한다.
+
+## 모니터링
+
+| 도구 | 보는 곳 | 볼 것 |
+| --- | --- | --- |
+| Grafana | `(기술) / (시나리오)` 대시보드 | (시나리오 메트릭 이름과 의미) |
+| Pinpoint | (application 이름) | (추적에서 보이는 구간) |
 
 ## 한계와 주의할 점
 
@@ -235,7 +288,7 @@ sequenceDiagram
 
 ### 팔레트
 
-배경(`fill`)은 브랜드 색을 옅게 한 파스텔, 선(`stroke`)은 브랜드 색 계열의 진한 색, 글자는 검정이다. 팔레트에 없는 서버를 쓰면 같은 방식으로 `classDef`를 만들고 이 표에 추가한다. 저장소 서버는 원통, 메시지 브로커는 평행사변형으로 그린다.
+배경(`fill`)은 브랜드 색을 옅게 한 파스텔, 선(`stroke`)은 브랜드 색 계열의 진한 색, 글자는 검정이다. 팔레트에 없는 서버를 쓰면 같은 방식으로 `classDef`를 만들고 이 표에 추가한다. 저장소 서버는 원통, 메시지 브로커는 평행사변형, 모니터링 도구는 이중 사각형으로 그린다.
 
 | 대상 | 모양 | classDef / style |
 | --- | --- | --- |
@@ -250,6 +303,9 @@ sequenceDiagram
 | MongoDB 서버 | `[("...")]` 원통 | `classDef mongo fill:#D5EDD5,stroke:#143A15,stroke-width:2px,color:#000000,font-weight:bold` |
 | Kafka 브로커 | `[/"..."/]` 평행사변형 | `classDef kafka fill:#DADADA,stroke:#000000,stroke-width:2px,color:#000000,font-weight:bold` |
 | RabbitMQ 브로커 | `[/"..."/]` 평행사변형 | `classDef rabbitmq fill:#FFE0CC,stroke:#6B2B00,stroke-width:2px,color:#000000,font-weight:bold` |
+| Prometheus, exporter | `[["..."]]` 이중 사각형 | `classDef prometheus fill:#FBD9CF,stroke:#8A2A0F,stroke-width:2px,color:#000000,font-weight:bold` |
+| Grafana | `[["..."]]` 이중 사각형 | `classDef grafana fill:#FDE3CC,stroke:#8A3A00,stroke-width:2px,color:#000000,font-weight:bold` |
+| Pinpoint (collector, web, agent) | `[["..."]]` 이중 사각형 | `classDef pinpoint fill:#D9E8FB,stroke:#0D3B73,stroke-width:2px,color:#000000,font-weight:bold` |
 | 흐름도 노드 (공통) | `[ ]`, `{ }`, `([ ])` | `classDef default fill:#FFFFFF,stroke:#212121,stroke-width:2px,color:#000000,font-weight:bold` |
 | 흐름도 원자·락 구간 | 점선 `subgraph` | `style (id) fill:#FFFFFF,stroke:(그 서버의 선 색),stroke-dasharray:5 5,stroke-width:2px,color:#000000,font-weight:bold` |
 

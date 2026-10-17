@@ -1,0 +1,32 @@
+# monitoring 그룹: 모든 모듈이 같이 쓰는 지표 모니터링 (Prometheus + Grafana)
+# 단독으로 띄운다. 수집 대상(앱, exporter)은 spring-boot-lab 네트워크에서 서비스 이름으로 찾는다
+name: monitoring
+
+services:
+  prometheus:
+    container_name: 'monitoring.prometheus'
+    image: 'prom/prometheus:v3.13.4'
+    ports:
+      - '9090:9090'
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    container_name: 'monitoring.grafana'
+    image: 'grafana/grafana:13.2.4'
+    ports:
+      - '3000:3000'
+    environment:
+      # 실습용이라 로그인 없이 관리자 권한으로 연다
+      GF_AUTH_ANONYMOUS_ENABLED: 'true'
+      GF_AUTH_ANONYMOUS_ORG_ROLE: 'Admin'
+      GF_AUTH_DISABLE_LOGIN_FORM: 'true'
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
+networks:
+  default:
+    name: spring-boot-lab

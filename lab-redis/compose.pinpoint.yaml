@@ -1,0 +1,25 @@
+# Pinpoint로 추적할 때 compose.yaml에 덧붙인다 (pinpoint 그룹이 떠 있어야 추적 데이터가 쌓인다)
+#   docker compose -f lab-redis/compose.yaml -f lab-redis/compose.pinpoint.yaml --profile local-test up --build -d
+# 에이전트 파일은 pinpoint-agent 컨테이너가 pinpoint-agent 볼륨에 채운다. 설정은 monitoring/pinpoint/agent.yaml에 한 번만 둔다
+services:
+  pinpoint-agent:
+    extends:
+      file: ../monitoring/pinpoint/agent.yaml
+      service: pinpoint-agent
+    container_name: 'redis.pinpoint-agent'
+    profiles: ['local-test']
+
+  lab-redis:
+    environment:
+      JAVA_TOOL_OPTIONS: >-
+        -javaagent:/pinpoint-agent/pinpoint-bootstrap.jar
+        -Dpinpoint.agentId=lab-redis
+        -Dpinpoint.applicationName=lab-redis
+        -Dpinpoint.profiler.profiles.active=release
+    volumes:
+      - pinpoint-agent:/pinpoint-agent:ro
+    depends_on:
+      - pinpoint-agent
+
+volumes:
+  pinpoint-agent:

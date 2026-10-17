@@ -1,0 +1,141 @@
+{
+  "uid": "lab-redis-couponfirstcome",
+  "title": "redis / couponfirstcome: 쿠폰 선착순",
+  "description": "발급 방식별 결과·처리 시간(coupon.issue), Redis 서버 지표(redis_exporter), 발급 API 요청(http.server.requests)",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "발급 처리량 (초당, 방식·결과별)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (method, result) (rate(coupon_issue_seconds_count{application=\"lab-redis\"}[1m]))",
+          "legendFormat": "{{method}} {{result}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "발급 처리 시간 p95 (방식별)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, method) (rate(coupon_issue_seconds_bucket{application=\"lab-redis\"}[1m])))",
+          "legendFormat": "{{method}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "선택한 시간 범위의 발급 결과 (방식·결과별)",
+      "description": "오른쪽 위 시간 범위(또는 그래프 드래그)를 nGrinder 테스트 구간에 맞추면 그 테스트의 결과만 나온다. 쿠폰 10장 + 100명이면 수량을 지키는 방식은 ISSUED 10, SOLD_OUT 90이다. 범위의 끝 값에서 시작 값을 빼서 정확한 개수를 센다. 범위 안에서 앱이 재시작되면 맞지 않는다",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value_and_name", "colorMode": "none" },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "expr": "(sum by (method, result) (coupon_issue_seconds_count{application=\"lab-redis\"}) - (sum by (method, result) (coupon_issue_seconds_count{application=\"lab-redis\"} offset $__range) or sum by (method, result) (coupon_issue_seconds_count{application=\"lab-redis\"}) * 0)) > 0",
+          "legendFormat": "{{method}} {{result}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "선택한 시간 범위의 발급 API 응답 수 (상태별)",
+      "description": "nGrinder가 보낸 요청이 서버에 몇 건 도착해서 어떤 상태로 끝났는지. 201 발급, 409 중복·소진, 404 없는 쿠폰, 400 모르는 method",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value_and_name", "colorMode": "none" },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "expr": "(sum by (status) (http_server_requests_seconds_count{application=\"lab-redis\", uri=\"/redis/coupons/{couponId}/issues\"}) - (sum by (status) (http_server_requests_seconds_count{application=\"lab-redis\", uri=\"/redis/coupons/{couponId}/issues\"} offset $__range) or sum by (status) (http_server_requests_seconds_count{application=\"lab-redis\", uri=\"/redis/coupons/{couponId}/issues\"}) * 0)) > 0",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Redis 명령 처리량 (초당)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(redis_commands_processed_total[1m])",
+          "legendFormat": "commands"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Redis 연결 클라이언트 수",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "redis_connected_clients",
+          "legendFormat": "clients"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "발급 API 요청 처리량 (초당, 상태별, 서버 기준)",
+      "description": "nGrinder 부하가 들어오는 동안의 POST /redis/coupons/{couponId}/issues",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (status) (rate(http_server_requests_seconds_count{application=\"lab-redis\", uri=\"/redis/coupons/{couponId}/issues\"}[1m]))",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "발급 API 응답 시간 p95 (서버 기준)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{application=\"lab-redis\", uri=\"/redis/coupons/{couponId}/issues\"}[1m])))",
+          "legendFormat": "p95"
+        }
+      ]
+    }
+  ]
+}

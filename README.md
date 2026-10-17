@@ -1,7 +1,7 @@
 # spring-boot-lab
 
 Redis 같은 기술을 Spring Boot에서 하나씩 테스트해 보는 실습 프로젝트다.
-기능마다 모듈을 따로 두고, 각 모듈은 공통 모듈 `lab-core`를 가져다 쓴다. 인프라는 모듈별 Docker Compose로 띄운다.
+기능마다 모듈을 따로 두고, 각 모듈은 공통 모듈 `core`를 가져다 쓴다. 인프라는 모듈별 Docker Compose로 띄운다.
 
 ## 버전
 
@@ -18,16 +18,30 @@ Kotlin과 Gradle 버전은 Spring Initializr 기본값을 따른다.
 
 ```
 spring-boot-lab
-├── build.gradle.kts     # 플러그인 버전, Java 25 toolchain, Spring Boot BOM, Kotlin 공통 설정
-├── settings.gradle.kts  # 모듈 등록
-├── lab-core             # 공통 Spring Boot 설정 (Java)
-└── lab-redis            # Redis 실습 (Kotlin)
-    ├── compose.yaml     # 이 모듈이 쓰는 인프라
-    └── Dockerfile       # 앱을 컨테이너로 띄울 때 사용
+├── build.gradle.kts         # 플러그인 버전, Java 25 toolchain, Spring Boot BOM, Kotlin 공통 설정
+├── settings.gradle.kts      # 모듈 등록
+├── Dockerfile               # 모든 모듈 공통 이미지 빌드 (build args MODULE로 모듈 선택)
+├── core                 # 공통 Spring Boot 설정 (Java)
+├── lab-redis                # Redis 실습 (Kotlin)
+│   ├── compose.yaml         # lab-redis 그룹: 앱, redis, redis-exporter
+│   └── compose.pinpoint.yaml # 앱에 Pinpoint 에이전트를 붙이는 설정
+├── loadtest                 # 부하 테스트 (nGrinder, 공용. Gradle 모듈 아님)
+│   ├── compose.yaml         # loadtest 그룹: nGrinder controller, agent
+│   └── scripts/             # nGrinder 스크립트 (기술/시나리오.groovy)
+├── monitoring               # 지표·추적 모니터링 스택 (공용)
+│   ├── compose.yaml         # monitoring 그룹: Prometheus, Grafana
+│   ├── prometheus/          # 수집 대상
+│   ├── grafana/             # 데이터소스, 대시보드
+│   └── pinpoint
+│       ├── compose.yaml     # pinpoint 그룹: Pinpoint 서버
+│       └── agent.yaml       # Pinpoint 에이전트 (모듈의 compose.pinpoint.yaml이 extends로 가져감)
+└── .run                     # IntelliJ 실행 설정 (그룹별 + 전부 띄우는 lab-redis-all)
 ```
 
-- `lab-core`: 공통 의존성(`spring-boot-starter`, `spring-boot-starter-webmvc`, springdoc)을 `api`로 노출한다. 공통 테스트 의존성(Spring Boot Test, Testcontainers)은 `testFixtures`로 노출한다.
-- `lab-redis`: `lab-core`를 import해서 Redis를 실습한다. 목적(시나리오)별로 패키지를 나누고, 각 시나리오는 쓰기(Command)와 읽기(Query)를 나눠서 구현한다.
+- `core`: 공통 의존성(`spring-boot-starter`, `spring-boot-starter-webmvc`, springdoc, actuator)을 `api`로 노출한다. Prometheus 레지스트리를 넣어 모든 모듈이 `/actuator/prometheus`를 연다. 공통 테스트 의존성(Spring Boot Test, Testcontainers)은 `testFixtures`로 노출한다.
+- `lab-redis`: `core`를 import해서 Redis를 실습한다. 목적(시나리오)별로 패키지를 나누고, 각 시나리오는 쓰기(Command)와 읽기(Query)를 나눠서 구현한다.
+- `loadtest`: nGrinder controller와 agent를 띄우고, 시나리오별 Groovy 스크립트로 대상 모듈의 시나리오 API에 부하를 준다. 부하 후 검증(예: 초과 발급 여부)은 스크립트가 로그로 남긴다.
+- `monitoring`: Prometheus + Grafana (지표 추이)와 Pinpoint (요청 단위 추적). 모듈과 별도 그룹으로 띄운다.
 
 ### 기능 모듈 패키지 구조
 
@@ -92,15 +106,52 @@ com.spring.lab.redis
 
 # 인프라만 띄우기
 docker compose -f lab-redis/compose.yaml up -d redis
-
-# 앱까지 컨테이너로 띄우기 (local-test 프로필)
-docker compose -f lab-redis/compose.yaml --profile local-test up --build
 ```
 
-앱을 띄운 뒤 확인할 주소:
+Docker로 띄울 때는 그룹마다 따로 띄운다. 원하는 그룹만 실행하면 된다. 그룹끼리는 `spring-boot-lab` 네트워크로 통신한다.
 
-- `http://localhost:8080/redis/ping`
-- `http://localhost:8080/swagger-ui.html`
+| 그룹 | IntelliJ 실행 설정 | 컨테이너 | 터미널 |
+| --- | --- | --- | --- |
+| `lab-redis` | `lab-redis` | `redis.app`, `redis.server`, `redis.exporter`, `redis.pinpoint-agent` | `docker compose -f lab-redis/compose.yaml -f lab-redis/compose.pinpoint.yaml --profile local-test up --build -d` |
+| `monitoring` | `monitoring` | `monitoring.prometheus`, `monitoring.grafana` | `docker compose -f monitoring/compose.yaml up -d` |
+| `pinpoint` | `pinpoint` | `pinpoint.web`, `pinpoint.collector`, `pinpoint.hbase`, `pinpoint.redis`, `pinpoint.zookeeper` | `docker compose -f monitoring/pinpoint/compose.yaml up -d` |
+| `loadtest` | `loadtest` | `loadtest.controller`, `loadtest.agent` | `docker compose -f loadtest/compose.yaml up -d` |
+| `lab-redis` + 모니터링 | `lab-redis-all` | `lab-redis`, `monitoring`, `pinpoint`의 11개 | 위 명령 3개 |
+
+- IntelliJ 실행 설정은 실행 목록의 `docker` 폴더에 있다 (`.run/`).
+- 종료는 같은 명령의 `up ...`을 `down`으로 바꾼다.
+- `lab-redis` 그룹은 Pinpoint 에이전트를 항상 붙인다. `pinpoint`가 꺼져 있어도 앱은 정상으로 뜨고, 추적 데이터만 쌓이지 않는다.
+- `lab-redis/compose.yaml`을 프로필 없이 실행하면 `redis.server`만 뜬다. `bootRun`도 이것만 띄운다.
+
+확인할 주소:
+
+| 주소 | 내용 |
+| --- | --- |
+| `http://localhost:8080/swagger-ui.html` | `lab-redis` API |
+| `http://localhost:8090` | nGrinder controller (`admin` / `admin`) |
+| `http://localhost:9090` | Prometheus |
+| `http://localhost:3000` | Grafana (로그인 없음). 대시보드 `lab 공통`, `redis / couponfirstcome` |
+| `http://localhost:8079` | Pinpoint web |
+
+## 부하 테스트
+
+nGrinder로 부하를 준다. `loadtest` 그룹을 띄운 뒤 `http://localhost:8090`(`admin` / `admin`)에서 진행한다.
+
+1. `Script` → `Create` → `Upload`로 `loadtest/scripts/(기술)/(시나리오).groovy`를 올린다. 예: `loadtest/scripts/redis/couponfirstcome.groovy`
+2. `Performance Test` → `Create Test`에서 올린 스크립트를 고르고, agent 1, 가상 사용자 수(프로세스 1, 스레드 = 가상 사용자 수), 실행 횟수를 넣는다.
+3. 옵션(예: 발급 방식)은 `상세 설정 보기`의 Parameter에 `key.value`를 쉼표로 이어 넣고(예: `method.lua,quantity.20`) `Save and Start`를 누른다.
+4. 결과(TPS, 응답 시간, 에러 수)는 테스트 상세 화면에서 보고, 검증 결과는 테스트 상세의 로그에서 `[검증` 줄로 본다.
+
+nGrinder 이미지는 amd64뿐이라 Apple Silicon에서는 에뮬레이션으로 돈다. agent가 낼 수 있는 최대 TPS가 실제 장비보다 낮다. 시나리오별 옵션과 검증 기준은 그 시나리오 README의 `부하 테스트` 섹션에 있다.
+
+## 모니터링
+
+| 도구 | 보는 것 | 수집 방식 |
+| --- | --- | --- |
+| Prometheus + Grafana | 지표 추이: HTTP 처리량·응답 시간, JVM, 시나리오 메트릭, 인프라 지표 | 앱의 `/actuator/prometheus`, 인프라 exporter를 5초마다 수집 |
+| Pinpoint | 요청 하나의 호출 경로와 구간별 시간 (Controller → Redis 명령까지), 서버맵 | 앱 JVM에 붙인 Pinpoint 에이전트가 collector로 전송 |
+
+Pinpoint는 컨테이너가 많아 메모리를 많이 쓴다. Docker Desktop 메모리를 넉넉히 잡고 필요할 때만 띄운다.
 
 ## 새 기능 모듈 추가
 
@@ -116,14 +167,18 @@ docker compose -f lab-redis/compose.yaml --profile local-test up --build
    }
 
    dependencies {
-       implementation(project(":lab-core"))
+       implementation(project(":core"))
        // 테스트할 기술의 starter
        developmentOnly("org.springframework.boot:spring-boot-docker-compose")
 
-       testImplementation(testFixtures(project(":lab-core")))
+       testImplementation(testFixtures(project(":core")))
    }
    ```
 
-3. 필요한 인프라를 `lab-kafka/compose.yaml`에 적는다.
+3. `lab-kafka/compose.yaml`을 만든다. `lab-redis/compose.yaml`처럼 `name: lab-kafka`, `spring-boot-lab` 네트워크, 인프라, exporter와 앱 컨테이너(`local-test` 프로필, 루트 `Dockerfile`에 `MODULE: lab-kafka`)를 적는다. 컨테이너 이름은 `kafka.(역할)`로 한다. Pinpoint 에이전트는 `compose.pinpoint.yaml`에서 `monitoring/pinpoint/agent.yaml`을 `extends`로 가져온다. `.run/lab-kafka.run.xml`과 공용 그룹까지 묶은 `.run/lab-kafka-all.run.xml`을 만든다.
 4. 애플리케이션 클래스에 `@Import(LabCoreConfiguration::class)`를 붙인다.
 5. `com.spring.lab.kafka.base` 패키지에 기본 명령 실습부터 만든다. 실전 상황은 그 뒤에 시나리오 패키지로 하나씩 추가한다.
+6. 모니터링과 부하 테스트를 연결한다.
+   - `monitoring/prometheus/prometheus.yml`에 앱과 exporter 수집 대상을 추가한다.
+   - 시나리오마다 `monitoring/grafana/dashboards/kafka/(시나리오).json` 대시보드를 만든다.
+   - 시나리오마다 `loadtest/scripts/kafka/(시나리오).groovy` nGrinder 스크립트를 만든다. 규칙은 `loadtest/CLAUDE.md`를 따른다.

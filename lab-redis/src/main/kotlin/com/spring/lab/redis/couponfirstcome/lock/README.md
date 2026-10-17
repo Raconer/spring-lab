@@ -156,6 +156,19 @@ sequenceDiagram
 
 - naive와 명령은 같지만, 락 덕분에 A의 확인과 발급 사이에 B의 확인이 끼어들 수 없다.
 
+## 부하 테스트
+
+nGrinder 테스트 Parameter `method.lock`으로 실행한다. 실행 조건과 검증 기준은 [시나리오 README](../README.md)의 `부하 테스트` 섹션을 따른다.
+
+예상 결과: 모두 통과. 응답 시간이 다른 방식보다 길다.
+
+## 모니터링
+
+| 도구 | 보는 곳 | 볼 것 |
+| --- | --- | --- |
+| Grafana | `redis / couponfirstcome` 대시보드 | `method="lock"` 선의 결과별 처리량과 p95 |
+| Pinpoint | application `lab-redis` | Redisson 락 획득·해제 스크립트(`EVAL`)와 그 사이의 Lettuce 명령 4개가 보인다. 락 대기 시간도 구간으로 보인다 |
+
 ## 한계와 주의할 점
 
 - 요청이 하나씩 줄을 서므로 처리량이 가장 낮다. 락 획득·해제 왕복과 대기가 요청마다 더해진다.

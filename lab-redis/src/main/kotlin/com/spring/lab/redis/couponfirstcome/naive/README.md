@@ -113,6 +113,19 @@ sequenceDiagram
 - 확인(`SCARD`)과 발급(`SADD`) 사이에 다른 요청의 확인이 끼어들어, 둘 다 "남아 있다"고 판단한다. 이것을 check-then-act 경쟁 상태라고 한다.
 - 같은 사용자가 동시에 요청하면 둘 다 `SISMEMBER`에서 0을 받는다. `SADD`는 Set이라 한 번만 들어가지만, 두 요청 모두 ISSUED로 응답한다.
 
+## 부하 테스트
+
+nGrinder 테스트 Parameter `method.naive`로 실행한다 (비워도 naive다). 실행 조건과 검증 기준은 [시나리오 README](../README.md)의 `부하 테스트` 섹션을 따른다.
+
+예상 결과: 검증 실패. 초과 발급되고, 201 응답 수가 실제 발급 수보다 많다.
+
+## 모니터링
+
+| 도구 | 보는 곳 | 볼 것 |
+| --- | --- | --- |
+| Grafana | `redis / couponfirstcome` 대시보드 | `method="naive"` 선의 결과별 처리량과 p95 |
+| Pinpoint | application `lab-redis` | Redis 명령 4개(`GET`, `SISMEMBER`, `SCARD`, `SADD`)가 따로 보인다 |
+
 ## 검증하는 테스트
 
 `naive/repository/NaiveCouponIssuerTest`

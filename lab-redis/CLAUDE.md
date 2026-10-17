@@ -28,6 +28,17 @@ controller, service, repository를 쓰기(Command)와 읽기(Query)로 나눈다
 - Lua 스크립트는 `src/main/resources/redis/<시나리오>/<방식>/`에 두고 `RedisScript.of(ClassPathResource(...), Long::class.javaObjectType)`로 읽는다. 반환 코드와 의미는 스크립트 주석에 적는다.
 - Redisson은 `couponfirstcome.lock`에서만 쓴다. `RedissonClient`는 `DataRedisConnectionDetails`로 만들어서 Spring Data Redis와 같은 접속 정보를 따른다.
 
+## 부하 테스트와 모니터링
+
+| 시나리오 | 메트릭 (service에서 기록) | 부하 스크립트 (nGrinder) | 대시보드 |
+| --- | --- | --- | --- |
+| `couponfirstcome` | `coupon.issue` Timer, 태그 `method`, `result` (`CouponCommandService`) | `loadtest/scripts/redis/couponfirstcome.groovy` | `monitoring/grafana/dashboards/redis/couponfirstcome.json` |
+| `base` | 없음 (HTTP 공통 지표만) | 없음 | 공통 대시보드 |
+
+- Redis 서버 지표는 `compose.yaml`의 `redis-exporter`(`local-test` 프로필, 컨테이너 `redis.exporter`)가 내보낸다.
+- Pinpoint 연결은 `compose.pinpoint.yaml`에 있다. 에이전트(`redis.pinpoint-agent`)는 `monitoring/pinpoint/agent.yaml`을 `extends`로 가져와 lab-redis 그룹 안에서 띄운다. agentId와 applicationName은 `lab-redis`다.
+- 시나리오를 추가하면 이 표를 채우고, 메트릭·부하 스크립트·대시보드를 같이 만든다.
+
 ## 테스트
 
 - 컨테이너 설정: `src/test/kotlin/com/spring/lab/redis/RedisTestContainerConfig.kt` (`redis:latest`, `compose.yaml`과 같은 이미지)

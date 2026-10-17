@@ -153,6 +153,34 @@ flowchart TD
 
 - 사용자별 발급 여부(`GET .../issues/{userId}`)는 `SISMEMBER coupon:{welcome}:issued-users user-1` 한 번으로 확인한다.
 
+## 부하 테스트
+
+nGrinder 스크립트 `loadtest/scripts/redis/couponfirstcome.groovy`로 부하를 준다. 실행마다 새 쿠폰(`load-(시작 시각)`)을 등록하고 발급 요청을 보낸 뒤, 쿠폰 상태를 조회해서 검증한다.
+
+| 항목 | 값 |
+| --- | --- |
+| Parameter (`key.value`를 쉼표로) | `method`: `naive`, `lua`, `incr`, `lock` (기본 `naive`) / `quantity`: 쿠폰 수량 (기본 10) / `sameUser`: `true`면 모든 요청이 `user-1` (기본 `false`: 요청마다 다른 사용자). 예: `method.lua`, `method.lock,quantity.20` |
+| 실행 조건 | agent 1, 프로세스 1, 스레드 100 (가상 사용자 100), 실행 횟수 1 |
+| 검증 | 발급 수가 수량을 넘지 않는다 / 201 응답 수와 실제 발급 수가 같다 / 받을 수 있는 만큼(수량과 사용자 수 중 작은 값) 모두 발급된다. `@AfterProcess`가 `[검증 통과]`, `[검증 실패]` 로그로 남긴다 |
+
+1. `http://localhost:8090`(nGrinder, `admin` / `admin`)의 `Script`에 `couponfirstcome.groovy`를 올린다.
+2. `Performance Test` → `Create Test`에서 스크립트를 고르고, 위 실행 조건과 `상세 설정 보기`의 Parameter(예: `method.lua`)를 넣고 시작한다.
+
+| 방식 | 예상 결과 |
+| --- | --- |
+| `naive` | 검증 실패. 초과 발급되고, 201 응답 수가 실제 발급 수보다 많다 |
+| `lua` | 모두 통과 |
+| `incr` | 모두 통과 |
+| `lock` | 모두 통과. 응답 시간이 가장 길다 |
+
+## 모니터링
+
+| 도구 | 보는 곳 | 볼 것 |
+| --- | --- | --- |
+| Grafana | `redis / couponfirstcome` 대시보드 | 선택한 시간 범위의 발급 결과(방식·결과별)와 응답 상태 수: 시간 범위를 테스트 구간에 맞추면 그 테스트 결과만 나온다 / `coupon_issue_seconds`: 방식·결과별 처리량과 p95 / Redis 명령 처리량·연결 수 / 발급 API 요청 처리량과 p95 (서버 기준) |
+| nGrinder | 테스트 상세 | TPS, 평균 응답 시간, 에러 수 (클라이언트 기준), 검증 로그 |
+| Pinpoint | application `lab-redis` | 요청 하나의 구간: `CouponCommandController` → `CouponCommandService` → 방식 구현체 → Redis 명령 (방식마다 다른 명령은 각 방식 README) |
+
 ## 검증하는 테스트
 
 | 테스트 | 확인하는 것 |
