@@ -37,7 +37,6 @@ out/
 .vscode/
 
 ### AI ###
-.claude/
 CLAUDE.local.md
 AGENTS.md
 GEMINI.md

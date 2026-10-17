@@ -68,7 +68,7 @@ flowchart TD
         C1(["PUT /redis/coupons/welcome<br/>quantity = 100"])
     end
     subgraph app["lab-redis 컨테이너"]
-        C2["CouponCommandController<br/>→ CouponCommandRepository.create"]
+        C2["CouponCommandController<br/>→ CouponCommandService.create"]
         C5(["204 No Content"])
     end
     subgraph redis["redis 컨테이너"]
@@ -105,7 +105,7 @@ flowchart TD
         I10(["404 + ProblemDetail"])
     end
     subgraph redis["redis 컨테이너"]
-        I6[["방식별 명령 실행<br/>(각 방식 README 참고)"]]
+        I6["방식별 명령 실행<br/>(각 방식 README 참고)"]
     end
 
     I1 --> I2

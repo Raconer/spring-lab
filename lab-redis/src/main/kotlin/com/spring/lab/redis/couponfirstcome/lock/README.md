@@ -33,7 +33,7 @@ flowchart LR
     subgraph docker["Docker 호스트 (docker compose)"]
         direction LR
         App1("lab-redis 컨테이너 #1<br/>eclipse-temurin:25-jre :8080")
-        App2("lab-redis 컨테이너 #2<br/>(확장 시)")
+        App2("lab-redis 컨테이너 #2<br/>eclipse-temurin:25-jre :8080")
         Redis[("redis 컨테이너<br/>redis:latest :6379")]
     end
 
@@ -73,7 +73,7 @@ flowchart TD
         Got{"획득했는가"}
         Timeout{"10초가 지났는가"}
         Fail(["예외 → 500"])
-        Watchdog[["Watchdog 타이머<br/>락을 가진 동안 10초마다 연장 요청"]]
+        Watchdog["Watchdog 타이머<br/>락을 가진 동안 10초마다 연장 요청"]
         subgraph appCritical["락 보유 중: 이 쿠폰은 한 요청만 판단"]
             HasQty{"값이 있는가"}
             Dup{"결과 == 1"}
