@@ -1,0 +1,19 @@
+# 수집 대상은 compose 서비스 이름으로 적는다. 모듈을 추가하면 여기에 대상을 추가한다
+# 그룹(compose 프로젝트)은 따로 뜨고 spring-boot-lab 네트워크로 연결된다. 떠 있지 않은 그룹의 대상은 DOWN으로 보인다
+# job은 compose 그룹 이름과 같게 한다. Targets 화면이 그룹별로 묶이고, Grafana에서 job으로 거를 수 있다
+# role 라벨: app(Spring 앱, core가 /actuator/prometheus를 연다), exporter(인프라 지표)
+# 한 job 안에서 경로가 다른 대상은 __metrics_path__ 라벨로 경로를 정한다
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: 'lab-redis'
+    static_configs:
+      - targets: ['lab-redis:8080']
+        labels:
+          role: 'app'
+          __metrics_path__: '/actuator/prometheus'
+      - targets: ['redis-exporter:9121']
+        labels:
+          role: 'exporter'

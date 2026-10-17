@@ -1,0 +1,38 @@
+# loadtest 그룹: nGrinder 부하 테스트 (controller + agent). 단독으로 띄운다
+# 서버와 다른 컨테이너에서 요청을 보내서, 부하 클라이언트가 서버 JVM 자원을 나눠 쓰지 않게 한다
+# 대상 앱은 spring-boot-lab 네트워크에서 서비스 이름으로 찾는다 (예: http://lab-redis:8080)
+# 스크립트는 scripts/(기술)/(시나리오).groovy에 두고 controller 화면에서 올린다
+name: loadtest
+
+services:
+  ngrinder-controller:
+    container_name: 'loadtest.controller'
+    image: 'ngrinder/controller:3.5.9-p1'
+    # amd64 이미지만 있다. Apple Silicon에서는 에뮬레이션으로 돈다
+    platform: linux/amd64
+    # 웹 화면만 호스트에 연다. agent 연결(16001)과 테스트 포트(12000~)는 네트워크 안에서만 쓴다
+    ports:
+      - '8090:80'
+    volumes:
+      - ngrinder-controller-data:/opt/ngrinder-controller
+    # agent 이미지는 기본으로 controller라는 이름을 찾는다
+    networks:
+      default:
+        aliases: ['controller']
+
+  ngrinder-agent:
+    container_name: 'loadtest.agent'
+    image: 'ngrinder/agent:3.5.9-p1'
+    # amd64 이미지만 있다. 에뮬레이션이라 agent가 낼 수 있는 최대 TPS가 실제 장비보다 낮다
+    platform: linux/amd64
+    # controller가 뜨기 전에 붙으면 실패하므로 붙을 때까지 다시 띄운다
+    restart: unless-stopped
+    depends_on:
+      - ngrinder-controller
+
+volumes:
+  ngrinder-controller-data:
+
+networks:
+  default:
+    name: spring-boot-lab

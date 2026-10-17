@@ -1,18 +1,43 @@
+# lab-redis 그룹: 앱, 실습 대상 redis, redis-exporter
+# 공용 스택(monitoring, pinpoint, loadtest)은 각자 따로 띄우고, spring-boot-lab 네트워크로 서로 통신한다
+# bootRun의 Docker Compose 지원은 프로필 없는 redis만 띄운다
+# 컨테이너 이름: (그룹).(역할)
+name: lab-redis
+
 services:
   redis:
+    container_name: 'redis.server'
     image: 'redis:latest'
     ports:
       - '6379:6379'
 
-  # bootRun의 Docker Compose 지원이 같이 띄우지 않도록 local-test 프로필로 분리한다
+  # bootRun이 같이 띄우지 않도록 local-test 프로필로 분리한다
   lab-redis:
+    container_name: 'redis.app'
     profiles: ['local-test']
     build:
       context: ..
-      dockerfile: lab-redis/Dockerfile
+      dockerfile: Dockerfile
+      args:
+        MODULE: lab-redis
     ports:
       - '8080:8080'
     environment:
       SPRING_DATA_REDIS_HOST: redis
     depends_on:
       - redis
+
+  # Redis 서버 지표를 Prometheus 형식으로 내보낸다 (monitoring/prometheus/prometheus.yml의 lab-redis 잡)
+  redis-exporter:
+    container_name: 'redis.exporter'
+    profiles: ['local-test']
+    image: 'oliver006/redis_exporter:v1.93.0'
+    environment:
+      REDIS_ADDR: 'redis://redis:6379'
+    depends_on:
+      - redis
+
+# 모든 그룹이 같은 이름의 네트워크를 쓴다. 먼저 뜬 그룹이 만들고, 나머지는 경고를 띄운 뒤 그대로 같이 쓴다
+networks:
+  default:
+    name: spring-boot-lab

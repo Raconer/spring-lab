@@ -1,0 +1,83 @@
+# pinpoint 그룹: 요청 단위 추적 모니터링 (Pinpoint 3.1.1). 단독으로 띄운다
+# pinpoint-apm/pinpoint-docker의 docker-compose.yml과 .env 값을 기준으로 필요한 서비스만 추렸다
+# 뺀 것: batch, flink, zookeeper 2·3번(단일 노드로 대체), quickstart 예제 앱, mysql(web의 사용자·알람 설정 저장소. 쓰지 않는다)
+# 에이전트는 앱 쪽 그룹에서 띄운다 (agent.yaml, 모듈의 compose.pinpoint.yaml). 에이전트는 spring-boot-lab 네트워크로 collector를 찾는다
+# 호스트 포트는 web(8079)만 연다. 앱(8080), redis(6379)와 겹치지 않게 하기 위해서다
+name: pinpoint
+
+services:
+  zoo1:
+    container_name: 'pinpoint.zookeeper'
+    image: 'zookeeper:3.4.13'
+    hostname: zoo1
+    # 세션 시간 상한은 tickTime의 20배다. 기본 2000(40초)이면 에뮬레이션으로 도는 HBase가 멈칫할 때 세션이 만료돼 master가 죽는다
+    # 5000으로 올려 상한을 100초로 만든다. HBase가 요청하는 90초가 그대로 적용된다
+    environment:
+      ZOO_TICK_TIME: '5000'
+    # HBase 이미지의 hbase-site.xml이 zoo1,zoo2,zoo3을 찾는다. 단일 노드로 줄였으므로 나머지 이름도 zoo1로 보낸다
+    networks:
+      default:
+        aliases: ['zoo2', 'zoo3']
+
+  pinpoint-hbase:
+    container_name: 'pinpoint.hbase'
+    image: 'pinpointdocker/pinpoint-hbase:3.1.1'
+    # amd64 이미지만 있다. Apple Silicon에서는 에뮬레이션으로 돈다
+    platform: linux/amd64
+    volumes:
+      - pinpoint-hbase-data:/home/pinpoint/hbase
+      - /home/pinpoint/zookeeper
+    depends_on:
+      - zoo1
+
+  # Pinpoint 내부용 Redis. 실습 대상 redis 서비스와 이름이 겹치지 않게 pinpoint-redis로 둔다
+  pinpoint-redis:
+    container_name: 'pinpoint.redis'
+    image: 'redis:7.0.14'
+    hostname: pinpoint-redis
+
+  pinpoint-collector:
+    container_name: 'pinpoint.collector'
+    image: 'pinpointdocker/pinpoint-collector:3.1.1'
+    # HBase가 준비되기 전에 뜨면 실패하는데 종료 코드가 0이라 on-failure로는 다시 뜨지 않는다. 준비될 때까지 다시 띄운다 (원본 compose는 restart: always)
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: 'release'
+      PINPOINT_ZOOKEEPER_ADDRESS: 'zoo1'
+      CLUSTER_ENABLE: 'true'
+      LOGGING_LEVEL_ROOT: 'INFO'
+      FLINK_CLUSTER_ENABLE: 'false'
+      SPRING_DATA_REDIS_HOST: 'pinpoint-redis'
+      SPRING_DATA_REDIS_PORT: '6379'
+    depends_on:
+      - pinpoint-hbase
+      - zoo1
+      - pinpoint-redis
+
+  pinpoint-web:
+    container_name: 'pinpoint.web'
+    image: 'pinpointdocker/pinpoint-web:3.1.1'
+    restart: unless-stopped # collector와 같은 이유
+    ports:
+      - '8079:8080'
+    environment:
+      SPRING_PROFILES_ACTIVE: 'release'
+      PINPOINT_ZOOKEEPER_ADDRESS: 'zoo1'
+      CLUSTER_ENABLE: 'true'
+      ADMIN_PASSWORD: 'admin'
+      CONFIG_SENDUSAGE: 'false'
+      CONFIG_SHOW_APPLICATIONSTAT: 'true'
+      LOGGING_LEVEL_ROOT: 'INFO'
+      SPRING_DATA_REDIS_HOST: 'pinpoint-redis'
+      SPRING_DATA_REDIS_PORT: '6379'
+    depends_on:
+      - pinpoint-hbase
+      - zoo1
+      - pinpoint-redis
+
+volumes:
+  pinpoint-hbase-data:
+
+networks:
+  default:
+    name: spring-boot-lab

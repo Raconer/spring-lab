@@ -1,0 +1,13 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="pinpoint" type="docker-deploy" factoryName="docker-compose.yml" folderName="docker" server-name="Docker">
+    <deployment type="docker-compose.yml">
+      <settings>
+        <option name="sourceFilePath" value="monitoring/pinpoint/compose.yaml" />
+        <option name="upDetach" value="true" />
+        <option name="upForceRecreate" value="true" />
+        <option name="upRemoveOrphans" value="true" />
+      </settings>
+    </deployment>
+    <method v="2" />
+  </configuration>
+</component>

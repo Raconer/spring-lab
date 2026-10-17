@@ -1,0 +1,26 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="lab-redis-all" type="docker-deploy" factoryName="docker-compose.yml" folderName="docker" server-name="Docker">
+    <deployment type="docker-compose.yml">
+      <settings>
+        <option name="profiles">
+          <list>
+            <option value="local-test" />
+          </list>
+        </option>
+        <option name="commandLineOptions" value="--build" />
+        <option name="secondarySourceFiles">
+          <list>
+            <option value="lab-redis/compose.pinpoint.yaml" />
+          </list>
+        </option>
+        <option name="sourceFilePath" value="lab-redis/compose.yaml" />
+        <option name="upForceRecreate" value="true" />
+        <option name="upRemoveOrphans" value="true" />
+      </settings>
+    </deployment>
+    <method v="2">
+      <option name="RunConfigurationTask" enabled="true" run_configuration_name="monitoring" run_configuration_type="docker-deploy" />
+      <option name="RunConfigurationTask" enabled="true" run_configuration_name="pinpoint" run_configuration_type="docker-deploy" />
+    </method>
+  </configuration>
+</component>
